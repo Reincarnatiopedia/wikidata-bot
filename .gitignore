@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+*.log
+gemini_keys_pool.json
+wikidata_lv_dictionary.json
