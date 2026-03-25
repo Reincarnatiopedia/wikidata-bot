@@ -14,23 +14,20 @@ from datetime import datetime, timedelta, timezone
 
 # --- Config ---
 API_URL = "https://www.wikidata.org/w/api.php"
-USER_AGENT = "ReincarnatiopediaBot/1.0"
-BOT_USER = "Maris Dreshmanis"
+USER_AGENT = os.environ.get(
+    "WIKIDATA_USER_AGENT",
+    "WikidataBot/1.0 (https://github.com/Reincarnatiopedia/wikidata-bot)"
+)
+BOT_USER = os.environ.get("WIKIDATA_BOT_USER", "").split("@")[0]
 
-ENV_PATH = "/opt/reincarnatiopedia/.env"
-WARMUP_LOG = "/opt/reincarnatiopedia/logs/wikidata_warmup.log"
-LATVIAN_LOG = "/opt/reincarnatiopedia/logs/wikidata_latvian.log"
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+WARMUP_LOG = os.environ.get("WARMUP_LOG", "logs/wikidata_warmup.log")
+LATVIAN_LOG = os.environ.get("LATVIAN_LOG", "logs/wikidata_latvian.log")
 
 
-def load_env():
-    token, chat = "", ""
-    if os.path.exists(ENV_PATH):
-        for line in open(ENV_PATH):
-            if line.startswith("TELEGRAM_BOT_TOKEN="):
-                token = line.split("=", 1)[1].strip()
-            elif line.startswith("TELEGRAM_CHAT_ID="):
-                chat = line.split("=", 1)[1].strip()
-    return token, chat
+
 
 
 def get_edit_count():
@@ -199,14 +196,13 @@ def send_telegram(msg, token, chat_id):
 
 
 if __name__ == "__main__":
-    token, chat_id = load_env()
     report = build_report()
 
     if "--dry-run" in sys.argv:
         print(report)
-    elif token and chat_id:
-        ok = send_telegram(report, token, chat_id)
+    elif TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        ok = send_telegram(report, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
         print("Sent" if ok else "Failed")
     else:
-        print("No TELEGRAM_BOT_TOKEN/CHAT_ID in .env")
+        print("No TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID env vars set")
         print(report)

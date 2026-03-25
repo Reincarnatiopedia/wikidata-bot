@@ -11,9 +11,9 @@ Usage:
 """
 
 import argparse
+import os
 import json
 import logging
-import os
 import random
 import sys
 import time
@@ -26,15 +26,15 @@ import requests
 # ---------------------------------------------------------------------------
 API_URL = "https://www.wikidata.org/w/api.php"
 SPARQL_URL = "https://query.wikidata.org/sparql"
-OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "deepseek-r1:14b"
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "deepseek-r1:14b")
 
-USER_AGENT = (
-    "ReincarnatiopediaBot/1.0 "
-    "(https://reincarnatiopedia.com; mailto:wikidata@marisdreshmanis.com)"
+USER_AGENT = os.environ.get(
+    "WIKIDATA_USER_AGENT",
+    "WikidataBot/1.0 (https://github.com/Reincarnatiopedia/wikidata-bot)"
 )
-BOT_USER = os.environ["WIKIDATA_BOT_USER"]
-BOT_PASS = os.environ["WIKIDATA_BOT_PASS"]
+BOT_USER = os.environ.get("WIKIDATA_BOT_USER", "")
+BOT_PASS = os.environ.get("WIKIDATA_BOT_PASS", "")
 EDIT_SUMMARY = "Adding missing language descriptions for science and technology items"
 MAXLAG = 5
 
@@ -129,6 +129,10 @@ class WikidataSession:
 
     # ---- auth ----
     def login(self):
+        if not BOT_USER or not BOT_PASS:
+            log.error("WIKIDATA_BOT_USER and WIKIDATA_BOT_PASS environment variables must be set")
+            sys.exit(1)
+
         # Step 1: get login token
         r = self.session.get(API_URL, params={
             "action": "query",
@@ -271,7 +275,7 @@ class WikidataSession:
         r = self.session.get(API_URL, params={
             "action": "query",
             "list": "abuselog",
-            "afluser": BOT_USER.split("@")[0],  # "Maris Dreshmanis"
+            "afluser": BOT_USER.split("@")[0],
             "afllimit": limit,
             "format": "json",
         })
@@ -419,9 +423,19 @@ def llm_translate(en_desc: str, target_lang: str,
     return _gemini_generate_description(prompt, target_lang)
 
 
-import json as _jj
-from pathlib import Path as _PP
-GEMINI_KEYS = _jj.load(open(_PP(__file__).parent / 'gemini_keys_pool.json'))['keys']
+def _load_gemini_keys() -> list[str]:
+    env_keys = os.environ.get("GEMINI_API_KEYS", "")
+    if env_keys:
+        return [k.strip() for k in env_keys.split(",") if k.strip()]
+    keys_path = os.path.join(os.path.dirname(__file__), "gemini_keys_pool.json")
+    if os.path.exists(keys_path):
+        import json as _jj
+        with open(keys_path) as f:
+            return _jj.load(f).get("keys", [])
+    single = os.environ.get("GEMINI_API_KEY", "")
+    return [single] if single else []
+
+GEMINI_KEYS = _load_gemini_keys()
 _gemini_key_idx = 0
 
 
@@ -430,6 +444,9 @@ def _gemini_generate_description(prompt: str, target_lang: str) -> Optional[str]
     Rotates through all keys on failure before giving up."""
     global _gemini_key_idx
     import urllib.request, json as _json
+
+    if not GEMINI_KEYS:
+        return None
 
     for attempt in range(len(GEMINI_KEYS)):
         key = GEMINI_KEYS[(_gemini_key_idx + attempt) % len(GEMINI_KEYS)]
@@ -467,13 +484,16 @@ def _gemini_generate_description(prompt: str, target_lang: str) -> Optional[str]
     return None
 
 
-DEEPSEEK_API_KEY = os.environ["DEEPSEEK_API_KEY"]
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 
 
 def _deepseek_generate_description(prompt: str) -> Optional[str]:
     """Use DeepSeek API as fallback when Gemini is rate-limited."""
     import urllib.request, json as _json
+
+    if not DEEPSEEK_API_KEY:
+        return None
 
     payload = {
         "model": "deepseek-chat",
@@ -1988,7 +2008,7 @@ def main():
             reverts = _check_reverts(ws)
             if reverts >= 2:
                 log.error("SAFETY STOP: %d reverts detected. Stopping to prevent damage.", reverts)
-                log.error("  Review: https://www.wikidata.org/wiki/Special:Contributions/Maris_Dreshmanis")
+                log.error("  Review: Check your contributions page on Wikidata")
                 break
 
         # Anti-spam delay: 3-5 seconds
@@ -2015,7 +2035,7 @@ def main():
             if recent_hits:
                 log.error("🛑 EMERGENCY STOP: %d NEW abuse filter hits in last 10 min!", len(recent_hits))
                 log.error("  Stopping to prevent account damage.")
-                log.error("  Review: https://www.wikidata.org/wiki/Special:AbuseLog?wpSearchUser=Maris+Dreshmanis")
+                log.error("  Review: Check your abuse log on Wikidata")
                 break
 
     log.info("Done. %d edits completed.", edits_done)
@@ -2038,7 +2058,7 @@ def main():
                     pass
         if recent_hits:
             log.warning("⚠️  %d abuse filter hits in last 30 min! Review at:", len(recent_hits))
-            log.warning("  https://www.wikidata.org/wiki/Special:AbuseLog?wpSearchUser=Maris+Dreshmanis")
+            log.warning("  Check your abuse log on Wikidata")
         else:
             log.info("✅ No recent abuse filter hits. Clean run.")
 

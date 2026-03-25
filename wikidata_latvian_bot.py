@@ -14,9 +14,9 @@ Usage on server:
 """
 
 import argparse
+import os
 import json
 import logging
-import os
 import random
 import sys
 import time
@@ -30,12 +30,12 @@ import requests
 API_URL = "https://www.wikidata.org/w/api.php"
 SPARQL_URL = "https://query.wikidata.org/sparql"
 
-USER_AGENT = (
-    "ReincarnatiopediaBot/1.0 "
-    "(https://reincarnatiopedia.com; mailto:wikidata@marisdreshmanis.com)"
+USER_AGENT = os.environ.get(
+    "WIKIDATA_USER_AGENT",
+    "WikidataBot/1.0 (https://github.com/Reincarnatiopedia/wikidata-bot)"
 )
-BOT_USER = os.environ["WIKIDATA_BOT_USER"]
-BOT_PASS = os.environ["WIKIDATA_BOT_PASS"]
+BOT_USER = os.environ.get("WIKIDATA_BOT_USER", "")
+BOT_PASS = os.environ.get("WIKIDATA_BOT_PASS", "")
 EDIT_SUMMARY = "Adding missing Latvian labels and descriptions"
 MAXLAG = 5
 SPARQL_DELAY = 5.0
@@ -240,6 +240,10 @@ class WikidataSession:
         self.csrf_token = None
 
     def login(self):
+        if not BOT_USER or not BOT_PASS:
+            log.error("WIKIDATA_BOT_USER and WIKIDATA_BOT_PASS environment variables must be set")
+            sys.exit(1)
+
         r = self.session.get(API_URL, params={
             "action": "query", "meta": "tokens",
             "type": "login", "format": "json"})
@@ -371,7 +375,6 @@ def translate_label(en_label: str) -> Optional[str]:
 
 def _load_lv_dictionary() -> dict:
     """Load EN->LV dictionary scraped from Wikidata itself."""
-    import os
     dict_path = os.path.join(os.path.dirname(__file__), "wikidata_lv_dictionary.json")
     if os.path.exists(dict_path):
         with open(dict_path) as f:
@@ -448,7 +451,7 @@ def _validate_with_deepseek(lv_desc: str, en_desc: str) -> Optional[str]:
             "https://api.deepseek.com/chat/completions",
             data=payload, headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {os.environ.get("DEEPSEEK_API_KEY", "")}",
+                "Authorization": f"Bearer {os.environ.get('DEEPSEEK_API_KEY', '')}",
             })
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = _json.loads(resp.read())
@@ -524,7 +527,7 @@ def _deepseek_translate(en_desc: str) -> Optional[str]:
             "https://api.deepseek.com/chat/completions",
             data=payload, headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {os.environ.get("DEEPSEEK_API_KEY", "")}",
+                "Authorization": f"Bearer {os.environ.get('DEEPSEEK_API_KEY', '')}",
             })
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = _json.loads(resp.read())
